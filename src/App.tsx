@@ -1,32 +1,106 @@
-import { useEffect, useState } from "react";
-import { PDFDocument, PDFTextField } from "pdf-lib";
+import React, { useEffect, useRef, useState } from "react";
+import { PDFDocument } from "pdf-lib";
 
 function App() {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
-  const [fields, setFields] = useState<
-    { name: string; value: string; type: string }[]
-  >([]);
+  const containerRef = useRef(null);
+  const inputRefs = useRef({});
+  const scale = 1.5;
+
+  const loadScript = (src, id) => {
+    if (!document.getElementById(id)) {
+      const script = document.createElement("script");
+      script.src = src;
+      script.id = id;
+      document.body.appendChild(script);
+    }
+  };
 
   useEffect(() => {
-    const loadPdf = async () => {
-      if (!pdf) return;
+    loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js",
+      "pdfjs",
+    );
+    loadScript(
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js",
+      "pdfjs-worker",
+    );
 
-      try {
-        const pdfDoc = await PDFDocument.load(pdf);
-        const form = pdfDoc.getForm();
-        const pdfFields = form.getFields();
-        const fieldData = pdfFields.map((field) => ({
-          name: field.getName(),
-          value: field instanceof PDFTextField ? field.getText() : "",
-          type: field.constructor.name,
-        }));
-        setFields(fieldData);
-      } catch (error) {
-        console.log(error);
+    const waitForPdfjs = setInterval(() => {
+      if (window.pdfjsLib) {
+        clearInterval(waitForPdfjs);
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
+
+        if (pdf) {
+          if (containerRef.current) {
+            containerRef.current.innerHTML = "";
+          }
+
+          const loadingTask = window.pdfjsLib.getDocument({ data: pdf });
+          loadingTask.promise.then((pdfDocument) => {
+            pdfDocument.getPage(1).then((page) => {
+              const viewport = page.getViewport({ scale: scale });
+              const canvas = document.createElement("canvas");
+              const context = canvas.getContext("2d");
+              canvas.height = viewport.height;
+              canvas.width = viewport.width;
+
+              if (containerRef.current) {
+                containerRef.current.appendChild(canvas);
+              }
+
+              const renderContext = {
+                canvasContext: context,
+                viewport: viewport,
+              };
+              page.render(renderContext).promise.then(() => {
+                return page.getAnnotations();
+              }).then((annotations) => {
+                annotations.forEach((annotation) => {
+                  let input;
+                  if (annotation.subtype === "Widget") {
+                    if (annotation.fieldType === "Tx") {
+                      input = document.createElement("input");
+                      input.type = "text";
+                      input.value = annotation.fieldValue || "";
+                    } else if (annotation.fieldType === "Btn") {
+                      if (annotation.checkBox) {
+                        input = document.createElement("input");
+                        input.type = "checkbox";
+                        input.checked = annotation.fieldValue === "Yes";
+                      } else {
+                        input = document.createElement("input");
+                        input.type = "radio";
+                        input.name = annotation.fieldName;
+                        input.value = annotation.buttonValue;
+                        input.checked =
+                          annotation.fieldValue === annotation.buttonValue;
+                      }
+                    }
+                  }
+
+                  if (input) {
+                    input.style.position = "absolute";
+                    input.style.left = (annotation.rect[0] * scale + 3) + "px";
+                    input.style.top =
+                      (canvas.height - annotation.rect[3] * scale + 5) + "px";
+                    input.style.width =
+                      (annotation.rect[2] - annotation.rect[0]) * scale + "px";
+                    input.style.height =
+                      (annotation.rect[3] - annotation.rect[1]) * scale + "px";
+                    containerRef.current.appendChild(input);
+                    inputRefs.current[annotation.fieldName] = input;
+                  }
+                });
+              });
+            });
+          });
+        }
       }
-    };
+    }, 100);
 
-    loadPdf();
+    return () => clearInterval(waitForPdfjs);
   }, [pdf]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,63 +115,44 @@ function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  const handleInputChange = (name: string, value: string) => {
-    setFields(
-      fields.map((field) => field.name === name ? { ...field, value } : field),
-    );
-  };
+  const updatePdf = async () => {
+    if (pdf) {
+      const existingPdf = await PDFDocument.load(pdf);
+      const form = existingPdf.getForm();
 
-  const renderInputField = (field) => {
-    switch (field.type) {
-      case "PDFTextField2":
-        return (
-          <input
-            type="text"
-            value={field.value}
-            onChange={(e) => handleInputChange(field.name, e.target.value)}
-          />
-        );
-      case "PDFCheckBox2":
-        return (
-          <input
-            type="checkbox"
-            checked={field.value === "Yes"} // Assuming 'Yes' means checked
-            onChange={(e) =>
-              handleInputChange(field.name, e.target.checked ? "Yes" : "No")}
-          />
-        );
-      case "PDFRadioGroup2":
-        // For radio buttons, you need to define the options
-        const options = ["Option1", "Option2", "Option3"]; // Define your options
-        return (
-          <div>
-            {options.map((option, idx) => (
-              <label key={idx}>
-                <input
-                  type="radio"
-                  value={option}
-                  checked={field.value === option}
-                  onChange={(e) => handleInputChange(field.name, option)}
-                />
-                {option}
-              </label>
-            ))}
-          </div>
-        );
-      default:
-        return <div>Unsupported field type</div>;
+      Object.entries(inputRefs.current).forEach(([name, input]) => {
+        const field = form.getField(name);
+        if (field) {
+          if (field.constructor.name === "PDFTextField") {
+            field.setText(input.value);
+          } else if (field.constructor.name === "PDFCheckBox") {
+            if (input.checked) {
+              field.check();
+            } else {
+              field.uncheck();
+            }
+          } else if (field.constructor.name === "PDFRadioButton") {
+            if (input.checked) {
+              form.getRadioGroup(field.getName()).select(input.value);
+            }
+          }
+        }
+      });
+
+      const pdfBytes = await existingPdf.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "updated-document.pdf";
+      link.click();
     }
   };
 
   return (
     <div style={{ width: "100%", height: "100vh", backgroundColor: "pink" }}>
-      <input type="file" onChange={handleFileChange} />
-      {fields.map((field, index) => (
-        <div key={index}>
-          <label>{field.name}</label>
-          {renderInputField(field)}
-        </div>
-      ))}
+      <div ref={containerRef} />
+      <input type="file" onChange={handleFileChange} accept="application/pdf" />
+      <button onClick={updatePdf}>Save Changes</button>
     </div>
   );
 }
