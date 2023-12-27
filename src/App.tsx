@@ -58,6 +58,11 @@ function App() {
                 return page.getAnnotations();
               }).then((annotations) => {
                 annotations.forEach((annotation) => {
+                  if (annotation.fieldType === "Btn" && annotation.checkBox) {
+                    console.log(
+                      `Checkbox Name: ${annotation.fieldName}, Default Value: ${annotation.fieldValue}`,
+                    );
+                  }
                   let input;
                   if (annotation.subtype === "Widget") {
                     if (annotation.fieldType === "Tx") {
@@ -68,18 +73,33 @@ function App() {
                       if (annotation.checkBox) {
                         input = document.createElement("input");
                         input.type = "checkbox";
-                        input.checked = annotation.fieldValue === "Yes";
+                        // Adjust the checked state based on the PDF's filled value
+                        // You might need to add more conditions based on your specific PDFs
+                        input.checked = !(annotation.fieldValue === "Off" ||
+                          annotation.fieldValue === "0");
                       } else {
                         input = document.createElement("input");
                         input.type = "radio";
                         input.name = annotation.fieldName;
                         input.value = annotation.buttonValue;
+                        // Set checked based on whether the current button's value matches the filled value
+                        // Adjust as necessary for your specific PDFs
                         input.checked =
                           annotation.fieldValue === annotation.buttonValue;
                       }
                     }
                   }
 
+                  if (input) {
+                    // Set input styles and append to the container...
+                    console.log(
+                      `Created input for field: ${annotation.fieldName}, Type: ${input.type}, Initial Value/Checked State: ${
+                        input.type === "checkbox" ? input.checked : input.value
+                      }`,
+                    );
+                    containerRef.current.appendChild(input);
+                    inputRefs.current[annotation.fieldName] = input;
+                  }
                   if (input) {
                     input.style.position = "absolute";
                     input.style.left = (annotation.rect[0] * scale + 3) + "px";
@@ -120,22 +140,26 @@ function App() {
       const existingPdf = await PDFDocument.load(pdf);
       const form = existingPdf.getForm();
 
-      Object.entries(inputRefs.current).forEach(([name, input]) => {
-        const field = form.getField(name);
+      Object.entries(inputRefs.current).forEach(([key, input]) => {
+        const field = form.getField(key);
         if (field) {
-          if (field.constructor.name === "PDFTextField") {
+          // Check the field type using a more flexible approach
+          const fieldType = field.constructor.name;
+          if (fieldType.includes("PDFTextField")) {
             field.setText(input.value);
-          } else if (field.constructor.name === "PDFCheckBox") {
+          } else if (fieldType.includes("PDFCheckBox")) {
             if (input.checked) {
               field.check();
             } else {
               field.uncheck();
             }
-          } else if (field.constructor.name === "PDFRadioButton") {
+          } else if (fieldType.includes("PDFRadioButton")) {
             if (input.checked) {
               form.getRadioGroup(field.getName()).select(input.value);
             }
           }
+        } else {
+          console.warn(`No PDF field found for name: ${key}`);
         }
       });
 
@@ -144,7 +168,10 @@ function App() {
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = "updated-document.pdf";
+      console.log("Triggering download for the updated PDF.");
       link.click();
+    } else {
+      console.warn("No PDF loaded when attempting to save updates.");
     }
   };
 
