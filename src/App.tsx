@@ -7,6 +7,48 @@ function App() {
   const inputRefs = useRef({});
   const scale = 1.5;
 
+  const autofillValues = {
+    // SSN Fields
+    "F[0].Page_1[0].PatientSection[0].SSN[0]": "123-45-6789", // Dummy SSN
+    "F[0].Page_1[0].PatientSection[0].SSN[1]": "987-65-4321", // Another Dummy SSN
+
+    // Name of Veteran
+    "F[0].Page_1[0].PatientSection[0].NameOfVeteran[0]": "John Doe", // Dummy Name
+
+    // Other Text Fields
+    "F[0].#subform[1].TextField10[0]": "Sample Text for TextField10", // Dummy Text
+    "F[0].#subform[1].HowExamCOnducted[0]": "In person", // Dummy Exam Conduct Method
+    "F[0].#subform[1].IdentifyEvidence[0]": "Document A, Document B", // Dummy Evidence List
+
+    // Checkboxes with Dummy States (true for checked, false for unchecked)
+    "F[0].#subform[1].VeteranClaimant[0]": true, // Checked
+    "F[0].#subform[1].OtherDescribe[0]": false, // Unchecked
+
+    // Radio Button Groups with Selected Option
+    "F[0].#subform[1].RadioButtonList[0]": "1", // Selecting option value "1" for the first group
+    "F[0].#subform[1].RadioButtonList[1]": "0", // Selecting option value "0" for the second group
+    "F[0].#subform[1].RadioButtonList[2]": "1", // Selecting option value "1" for the third group
+    "F[0].#subform[1].RadioButtonList[3]": "0", // Selecting option value "0" for the fourth group
+  };
+
+  const handleAutofill = () => {
+    Object.entries(autofillValues).forEach(([fieldName, value]) => {
+      const inputElement = inputRefs.current[fieldName];
+      if (inputElement) {
+        if (inputElement.type === "checkbox") {
+          inputElement.checked = value;
+        } else {
+          inputElement.value = value;
+        }
+
+        // Log the autofill action
+        console.log(`Autofilled ${fieldName} with value: ${value}`);
+      } else {
+        console.warn(`No input found for ${fieldName}`);
+      }
+    });
+  };
+
   const loadScript = (src, id) => {
     if (!document.getElementById(id)) {
       const script = document.createElement("script");
@@ -58,12 +100,23 @@ function App() {
                 return page.getAnnotations();
               }).then((annotations) => {
                 annotations.forEach((annotation) => {
-                  if (annotation.fieldType === "Btn" && annotation.checkBox) {
-                    console.log(
-                      `Checkbox Name: ${annotation.fieldName}, Default Value: ${annotation.fieldValue}`,
-                    );
+                  if (
+                    annotation.fieldType === "Btn" &&
+                    annotation.checkBox !== true
+                  ) {
+                    // This is a radio button. Log its group name and value.
+                    // console.log(
+                    //   `Radio Button Found: Group Name: ${annotation.fieldName}, Option Value: ${annotation.buttonValue}`,
+                    // );
+                      console.log('radio anno', annotation)
+                  } else {
+                    // Log other field types
+                    // console.log(
+                    //   `Field Found: Name: ${annotation.fieldName}, Type: ${annotation.fieldType}, Subtype: ${annotation.subtype}`,
+                    // );
                   }
                   let input;
+
                   if (annotation.subtype === "Widget") {
                     if (annotation.fieldType === "Tx") {
                       input = document.createElement("input");
@@ -73,8 +126,6 @@ function App() {
                       if (annotation.checkBox) {
                         input = document.createElement("input");
                         input.type = "checkbox";
-                        // Adjust the checked state based on the PDF's filled value
-                        // You might need to add more conditions based on your specific PDFs
                         input.checked = !(annotation.fieldValue === "Off" ||
                           annotation.fieldValue === "0");
                       } else {
@@ -82,23 +133,10 @@ function App() {
                         input.type = "radio";
                         input.name = annotation.fieldName;
                         input.value = annotation.buttonValue;
-                        // Set checked based on whether the current button's value matches the filled value
-                        // Adjust as necessary for your specific PDFs
                         input.checked =
                           annotation.fieldValue === annotation.buttonValue;
                       }
                     }
-                  }
-
-                  if (input) {
-                    // Set input styles and append to the container...
-                    console.log(
-                      `Created input for field: ${annotation.fieldName}, Type: ${input.type}, Initial Value/Checked State: ${
-                        input.type === "checkbox" ? input.checked : input.value
-                      }`,
-                    );
-                    containerRef.current.appendChild(input);
-                    inputRefs.current[annotation.fieldName] = input;
                   }
                   if (input) {
                     input.style.position = "absolute";
@@ -139,23 +177,36 @@ function App() {
     if (pdf) {
       const existingPdf = await PDFDocument.load(pdf);
       const form = existingPdf.getForm();
+      const updatedGroups = {}; // To track which radio groups have been updated
 
       Object.entries(inputRefs.current).forEach(([key, input]) => {
         const field = form.getField(key);
         if (field) {
-          // Check the field type using a more flexible approach
-          const fieldType = field.constructor.name;
-          if (fieldType.includes("PDFTextField")) {
+          console.log(
+            `Updating field: ${key}, Type: ${field.constructor.name}, Value: ${input.value}, Checked: ${input.checked}`,
+          );
+
+          if (field.constructor.name.includes("PDFTextField")) {
             field.setText(input.value);
-          } else if (fieldType.includes("PDFCheckBox")) {
+            console.log(`Text field ${key} set to ${input.value}`);
+          } else if (field.constructor.name.includes("PDFCheckBox")) {
             if (input.checked) {
               field.check();
             } else {
               field.uncheck();
             }
-          } else if (fieldType.includes("PDFRadioButton")) {
-            if (input.checked) {
+            console.log(`Checkbox ${key} set to ${input.checked}`);
+          } else if (field.constructor.name.match(/PDFRadioGroup/)) {
+            console.log(
+              `Radio Group: ${field.getName()}, Option: ${input.value}, Checked: ${input.checked}`,
+            );
+            // Update the radio button only if it's the one that's checked and the group hasn't been updated yet
+            if (input.checked && !updatedGroups[field.getName()]) {
+              console.log(
+                `Setting radio group ${field.getName()} to value ${input.value}`,
+              );
               form.getRadioGroup(field.getName()).select(input.value);
+              updatedGroups[field.getName()] = true; // Mark this group as updated
             }
           }
         } else {
@@ -163,12 +214,12 @@ function App() {
         }
       });
 
+      // Save the updated PDF and provide it for download
       const pdfBytes = await existingPdf.save();
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
       link.download = "updated-document.pdf";
-      console.log("Triggering download for the updated PDF.");
       link.click();
     } else {
       console.warn("No PDF loaded when attempting to save updates.");
@@ -180,6 +231,8 @@ function App() {
       <div ref={containerRef} />
       <input type="file" onChange={handleFileChange} accept="application/pdf" />
       <button onClick={updatePdf}>Save Changes</button>
+
+      <button onClick={handleAutofill}>Autofill</button> {/* Autofill Button */}
     </div>
   );
 }
