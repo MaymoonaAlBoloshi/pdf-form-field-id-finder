@@ -3,6 +3,9 @@ import { PDFDocument, PDFHexString } from "pdf-lib";
 
 function App() {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+
   const containerRef = useRef(null);
   const inputRefs = useRef({});
   const scale = 1.5;
@@ -29,6 +32,18 @@ function App() {
     "F[0].#subform[1].RadioButtonList[1]": "0", // Selecting option value "0" for the second group
     "F[0].#subform[1].RadioButtonList[2]": "1", // Selecting option value "1" for the third group
     "F[0].#subform[1].RadioButtonList[3]": "0", // Selecting option value "0" for the fourth group
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
   };
 
   const handleAutofill = () => {
@@ -78,22 +93,23 @@ function App() {
           "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js";
 
         if (pdf) {
-          if (containerRef.current) {
-            containerRef.current.innerHTML = "";
-          }
-
           const loadingTask = window.pdfjsLib.getDocument({ data: pdf });
           loadingTask.promise.then((pdfDocument) => {
-            pdfDocument.getPage(1).then((page) => {
+            setTotalPages(pdfDocument.numPages); // Set the total number of pages
+
+            pdfDocument.getPage(currentPage).then((page) => {
+              // Clear previous inputs and canvas
+              if (containerRef.current) {
+                containerRef.current.innerHTML = "";
+                inputRefs.current = {}; // Clear previous input references
+              }
+
               const viewport = page.getViewport({ scale: scale });
               const canvas = document.createElement("canvas");
               const context = canvas.getContext("2d");
               canvas.height = viewport.height;
               canvas.width = viewport.width;
-
-              if (containerRef.current) {
-                containerRef.current.appendChild(canvas);
-              }
+              containerRef.current.appendChild(canvas);
 
               const renderContext = {
                 canvasContext: context,
@@ -114,8 +130,9 @@ function App() {
                       if (annotation.checkBox) {
                         input = document.createElement("input");
                         input.type = "checkbox";
-                        input.checked = !(annotation.fieldValue === "Off" ||
-                          annotation.fieldValue === "0");
+                        input.checked =
+                          !(annotation.fieldValue === "Off" ||
+                            annotation.fieldValue === "0");
                       } else {
                         input = document.createElement("input");
                         input.type = "radio";
@@ -137,19 +154,19 @@ function App() {
                       (annotation.rect[3] - annotation.rect[1]) * scale + "px";
                     containerRef.current.appendChild(input);
                     inputRefs.current[annotation.fieldName] = input;
+
+                    // Register event listeners for changes
                     const logChange = (event) => {
                       console.log(
                         `Field changed: ${annotation.fieldName}, New Value: ${event.target.value}, Checked: ${event.target.checked}`,
                       );
                     };
-
-                    // Register the event listener based on input type
                     if (input.type === "text") {
-                      input.addEventListener("input", logChange); // For text inputs
+                      input.addEventListener("input", logChange);
                     } else if (
                       input.type === "checkbox" || input.type === "radio"
                     ) {
-                      input.addEventListener("change", logChange); // For checkboxes and radio buttons
+                      input.addEventListener("change", logChange);
                     }
                   }
                 });
@@ -161,7 +178,7 @@ function App() {
     }, 100);
 
     return () => clearInterval(waitForPdfjs);
-  }, [pdf]);
+  }, [pdf, currentPage]); // Depend on pdf and currentPage
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files ? event.target.files[0] : null;
@@ -252,6 +269,14 @@ function App() {
       <button onClick={updatePdf}>Save Changes</button>
 
       <button onClick={handleAutofill}>Autofill</button> {/* Autofill Button */}
+
+      <button onClick={goToPreviousPage} disabled={currentPage === 1}>
+        Previous Page
+      </button>
+      <span>Page {currentPage} of {totalPages}</span>
+      <button onClick={goToNextPage} disabled={currentPage === totalPages}>
+        Next Page
+      </button>
     </div>
   );
 }
