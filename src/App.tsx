@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFHexString } from "pdf-lib";
 
 function App() {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
@@ -37,12 +37,15 @@ function App() {
       if (inputElement) {
         if (inputElement.type === "checkbox") {
           inputElement.checked = value;
+        } else if (inputElement.type === "radio") {
+          if (inputElement.value === value.toString()) {
+            inputElement.checked = true;
+          }
         } else {
           inputElement.value = value;
         }
 
         // Log the autofill action
-        console.log(`Autofilled ${fieldName} with value: ${value}`);
       } else {
         console.warn(`No input found for ${fieldName}`);
       }
@@ -100,21 +103,6 @@ function App() {
                 return page.getAnnotations();
               }).then((annotations) => {
                 annotations.forEach((annotation) => {
-                  if (
-                    annotation.fieldType === "Btn" &&
-                    annotation.checkBox !== true
-                  ) {
-                    // This is a radio button. Log its group name and value.
-                    // console.log(
-                    //   `Radio Button Found: Group Name: ${annotation.fieldName}, Option Value: ${annotation.buttonValue}`,
-                    // );
-                      console.log('radio anno', annotation)
-                  } else {
-                    // Log other field types
-                    // console.log(
-                    //   `Field Found: Name: ${annotation.fieldName}, Type: ${annotation.fieldType}, Subtype: ${annotation.subtype}`,
-                    // );
-                  }
                   let input;
 
                   if (annotation.subtype === "Widget") {
@@ -149,6 +137,20 @@ function App() {
                       (annotation.rect[3] - annotation.rect[1]) * scale + "px";
                     containerRef.current.appendChild(input);
                     inputRefs.current[annotation.fieldName] = input;
+                    const logChange = (event) => {
+                      console.log(
+                        `Field changed: ${annotation.fieldName}, New Value: ${event.target.value}, Checked: ${event.target.checked}`,
+                      );
+                    };
+
+                    // Register the event listener based on input type
+                    if (input.type === "text") {
+                      input.addEventListener("input", logChange); // For text inputs
+                    } else if (
+                      input.type === "checkbox" || input.type === "radio"
+                    ) {
+                      input.addEventListener("change", logChange); // For checkboxes and radio buttons
+                    }
                   }
                 });
               });
@@ -181,14 +183,10 @@ function App() {
 
       Object.entries(inputRefs.current).forEach(([key, input]) => {
         const field = form.getField(key);
-        if (field) {
-          console.log(
-            `Updating field: ${key}, Type: ${field.constructor.name}, Value: ${input.value}, Checked: ${input.checked}`,
-          );
 
+        if (field) {
           if (field.constructor.name.includes("PDFTextField")) {
             field.setText(input.value);
-            console.log(`Text field ${key} set to ${input.value}`);
           } else if (field.constructor.name.includes("PDFCheckBox")) {
             if (input.checked) {
               field.check();
@@ -197,20 +195,41 @@ function App() {
             }
             console.log(`Checkbox ${key} set to ${input.checked}`);
           } else if (field.constructor.name.match(/PDFRadioGroup/)) {
+            const options = field.getOptions(); // Get available options as an array
             console.log(
-              `Radio Group: ${field.getName()}, Option: ${input.value}, Checked: ${input.checked}`,
+              `Found Radio Group: ${field.getName()}, Available Options: ${
+                options.join(",")
+              }`,
             );
-            // Update the radio button only if it's the one that's checked and the group hasn't been updated yet
-            if (input.checked && !updatedGroups[field.getName()]) {
+
+            // Find the checked radio button in this group using the key (field name)
+            const checkedInput = document.querySelector(
+              `input[name="${key}"]:checked`,
+            );
+
+            if (checkedInput && !updatedGroups[field.getName()]) {
               console.log(
-                `Setting radio group ${field.getName()} to value ${input.value}`,
+                `Checked radio button for ${field.getName()} has value ${checkedInput.value}`,
               );
-              form.getRadioGroup(field.getName()).select(input.value);
-              updatedGroups[field.getName()] = true; // Mark this group as updated
+
+              // Ensure the value of the checked radio button is one of the available options
+              if (options.includes(checkedInput.value)) {
+                console.log(
+                  `Setting radio group ${field.getName()} to value ${checkedInput.value}`,
+                );
+                const optionValue = parseInt(checkedInput.value) + 1;
+                console.log(`Option value: ${optionValue}`);
+                field.select(optionValue.toString()); // Select the option in the radio group
+                updatedGroups[field.getName()] = true; // Mark this group as updated
+              } else {
+                console.warn(
+                  `Invalid value for ${field.getName()}: ${checkedInput.value}`,
+                );
+              }
             }
           }
         } else {
-          console.warn(`No PDF field found for name: ${key}`);
+          console.warn(`No field found in PDF for ${key}`);
         }
       });
 
