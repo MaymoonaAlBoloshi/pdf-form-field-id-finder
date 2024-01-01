@@ -46,23 +46,27 @@ function App() {
     }
   };
 
+  console.log(inputRefs.current)
+  
   const handleAutofill = () => {
     Object.entries(autofillValues).forEach(([fieldName, value]) => {
       const inputElement = inputRefs.current[fieldName];
-      if (inputElement) {
-        if (inputElement.type === "checkbox") {
-          inputElement.checked = value;
-        } else if (inputElement.type === "radio") {
-          if (inputElement.value === value.toString()) {
-            inputElement.checked = true;
-          }
-        } else {
-          inputElement.value = value;
-        }
-
-        // Log the autofill action
+      if (!inputElement) console.warn(`No input found for ${fieldName}`);
+      if (inputElement.type === "checkbox") {
+        inputElement.checked = value;
       } else {
-        console.warn(`No input found for ${fieldName}`);
+        inputElement.value = value;
+      }
+    });
+
+    Object.entries(autofillValues).forEach(([fieldName, value]) => {
+      const inputElement = inputRefs.current[fieldName];
+      if (!inputElement) console.warn(`No input found for ${fieldName}`);
+
+      if (inputElement.type === "radio") {
+        if (inputElement.value === value.toString()) {
+          inputElement.checked = true;
+        }
       }
     });
   };
@@ -130,9 +134,8 @@ function App() {
                       if (annotation.checkBox) {
                         input = document.createElement("input");
                         input.type = "checkbox";
-                        input.checked =
-                          !(annotation.fieldValue === "Off" ||
-                            annotation.fieldValue === "0");
+                        input.checked = !(annotation.fieldValue === "Off" ||
+                          annotation.fieldValue === "0");
                       } else {
                         input = document.createElement("input");
                         input.type = "radio";
@@ -157,9 +160,9 @@ function App() {
 
                     // Register event listeners for changes
                     const logChange = (event) => {
-                      console.log(
-                        `Field changed: ${annotation.fieldName}, New Value: ${event.target.value}, Checked: ${event.target.checked}`,
-                      );
+                      // console.log(
+                      //   `Field changed: ${annotation.fieldName}, New Value: ${event.target.value}, Checked: ${event.target.checked}`,
+                      // );
                     };
                     if (input.type === "text") {
                       input.addEventListener("input", logChange);
@@ -210,14 +213,8 @@ function App() {
             } else {
               field.uncheck();
             }
-            console.log(`Checkbox ${key} set to ${input.checked}`);
           } else if (field.constructor.name.match(/PDFRadioGroup/)) {
             const options = field.getOptions(); // Get available options as an array
-            console.log(
-              `Found Radio Group: ${field.getName()}, Available Options: ${
-                options.join(",")
-              }`,
-            );
 
             // Find the checked radio button in this group using the key (field name)
             const checkedInput = document.querySelector(
@@ -225,17 +222,9 @@ function App() {
             );
 
             if (checkedInput && !updatedGroups[field.getName()]) {
-              console.log(
-                `Checked radio button for ${field.getName()} has value ${checkedInput.value}`,
-              );
-
               // Ensure the value of the checked radio button is one of the available options
               if (options.includes(checkedInput.value)) {
-                console.log(
-                  `Setting radio group ${field.getName()} to value ${checkedInput.value}`,
-                );
                 const optionValue = parseInt(checkedInput.value) + 1;
-                console.log(`Option value: ${optionValue}`);
                 field.select(optionValue.toString()); // Select the option in the radio group
                 updatedGroups[field.getName()] = true; // Mark this group as updated
               } else {
