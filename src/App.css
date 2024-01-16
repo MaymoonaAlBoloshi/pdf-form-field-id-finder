@@ -1,1 +1,15 @@
+.direction-button {
+  color: #1d8085;
+  background-color: #fff;
+  border: 3px solid #1d8085;
+  padding: 0.5rem 1rem;
+  border-radius: 16px;
+}
 
+.outlined-button {
+  color: white;
+  background-color: transparent;
+  border: 3px solid white;
+  padding: 0.5rem 1rem;
+  border-radius: 16px;
+}

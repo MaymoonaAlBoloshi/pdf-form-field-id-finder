@@ -6,7 +6,6 @@ function App() {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [schema, setSchema] = useState([]);
 
   const containerRef = useRef(null);
   const inputRefs = useRef({});
@@ -125,38 +124,12 @@ function App() {
                 return page.getAnnotations();
               }).then((annotations) => {
                 annotations.forEach((annotation) => {
-                  const getFieldType = (annotation) => {
-                    if (annotation.fieldType === "Tx") {
-                      return "text";
-                    } else if (annotation.fieldType === "Btn") {
-                      if (annotation.checkBox) {
-                        return "checkbox";
-                      } else {
-                        return "radio";
-                      }
-                    }
-                  };
-
-                  let fieldObj = {
-                    id: annotation.id,
-                    name: annotation.fieldName,
-                    value: annotation.fieldValue,
-                    type: getFieldType(annotation),
-                  };
-
-                  setSchema((prevSchema) => {
-                    return [...prevSchema, fieldObj];
-                  });
-
                   let input;
 
                   if (annotation.subtype === "Widget") {
                     if (annotation.fieldType === "Tx") {
                       input = document.createElement("input");
                       input.type = "text";
-                      // add input type from here
-                      // fieldObj = { ...fieldObj, type: "text" };
-                      // console.log("fieldObj", fieldObj);
                       input.value = annotation.fieldValue || "";
                     } else if (annotation.fieldType === "Btn") {
                       if (annotation.checkBox) {
@@ -252,9 +225,16 @@ function App() {
             );
 
             if (checkedInput && !updatedGroups[field.getName()]) {
-              const optionValue = parseInt(checkedInput.value) + 1;
-              field.select(optionValue.toString()); // Select the option in the radio group
-              updatedGroups[field.getName()] = true; // Mark this group as updated
+              // Ensure the value of the checked radio button is one of the available options
+              if (options.includes(checkedInput.value)) {
+                const optionValue = parseInt(checkedInput.value) + 1;
+                field.select(optionValue.toString()); // Select the option in the radio group
+                updatedGroups[field.getName()] = true; // Mark this group as updated
+              } else {
+                console.warn(
+                  `Invalid value for ${field.getName()}: ${checkedInput.value}`,
+                );
+              }
             }
           }
         } else {
@@ -275,103 +255,80 @@ function App() {
   };
 
   return (
-    <>
+    <div
+      style={{
+        width: "100%",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
       <div
         style={{
           width: "100%",
-          height: "100vh",
+          height: 100,
           display: "flex",
-          flexDirection: "column",
+          justifyContent: "space-around",
+          alignItems: "center",
+          padding: 20,
+          backgroundColor: "#1d8085",
+        }}
+      >
+        <input
+          type="file"
+          onChange={handleFileChange}
+          accept="application/pdf"
+          className="outlined-button"
+          style={{
+            position: "relative",
+          }}
+        />
+        <button
+          className="outlined-button"
+          onClick={updatePdf}
+        >
+          Save Changes
+        </button>
+
+        <button
+          className="outlined-button"
+          onClick={handleAutofill}
+        >
+          Autofill
+        </button>{" "}
+        {/* Autofill Button */}
+      </div>
+      <div ref={containerRef} />
+
+      <div
+        style={{
+          width: "100%",
+          height: 100,
+          display: "flex",
+          justifyContent: "center",
+          padding: 20,
+          gap: 20,
           alignItems: "center",
         }}
       >
-        <div
-          style={{
-            width: "100%",
-            height: 100,
-            display: "flex",
-            justifyContent: "space-around",
-            alignItems: "center",
-            padding: 20,
-            backgroundColor: "#1d8085",
-          }}
-        >
-          <input
-            type="file"
-            onChange={handleFileChange}
-            accept="application/pdf"
-            className="outlined-button"
-            style={{
-              position: "relative",
-            }}
-          />
-          <button
-            className="outlined-button"
-            onClick={updatePdf}
-          >
-            Save Changes
-          </button>
-
-          <button
-            className="outlined-button"
-            onClick={handleAutofill}
-          >
-            Autofill
-          </button>{" "}
-          {/* Autofill Button */}
-        </div>
-        <div ref={containerRef} />
-
-        <div
-          style={{
-            width: "100%",
-            height: 100,
-            display: "flex",
-            justifyContent: "center",
-            padding: 20,
-            gap: 20,
-            alignItems: "center",
-          }}
-        >
-          <button
-            className="direction-button"
-            onClick={goToPreviousPage}
-            disabled={currentPage === 1}
-          >
-            Prev
-          </button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <button
-            className="direction-button"
-            onClick={goToNextPage}
-            disabled={currentPage === totalPages}
-          >
-            Next
-          </button>
-        </div>
-
         <button
           className="direction-button"
-          onClick={() =>
-            document.getElementById("schema-output").value = JSON.stringify(
-              schema,
-              null,
-              2,
-            )}
+          onClick={goToPreviousPage}
+          disabled={currentPage === 1}
         >
-          Log Schema
+          Prev
         </button>
-        <textarea
-          id="schema-output"
-          style={{
-            minHeight: "500px",
-          }}
-          rows={10}
-          cols={80}
+        <span>Page {currentPage} of {totalPages}</span>
+        <button
+          className="direction-button"
+          onClick={goToNextPage}
+          disabled={currentPage === totalPages}
         >
-        </textarea>
+          Next
+        </button>
       </div>
-    </>
+    </div>
   );
 }
 
