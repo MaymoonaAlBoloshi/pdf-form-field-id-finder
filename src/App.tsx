@@ -1,3 +1,7 @@
+// Dear future develoepr, sorry if this kills your brain cells.
+// I wrote this by making a deal with Satan (CHatGPT), which was to  get the funcitonality done
+// but I'll never be able to read it.
+// I hope you live in peace
 import React, { useEffect, useRef, useState } from "react";
 import { PDFDocument, PDFHexString } from "pdf-lib";
 import "./App.css";
@@ -12,30 +16,6 @@ function App() {
   const inputRefs = useRef({});
   const scale = 1.5;
 
-  const autofillValues = {
-    // SSN Fields
-    "F[0].Page_1[0].PatientSection[0].SSN[0]": "123-45-6789", // Dummy SSN
-    "F[0].Page_1[0].PatientSection[0].SSN[1]": "987-65-4321", // Another Dummy SSN
-
-    // Name of Veteran
-    "F[0].Page_1[0].PatientSection[0].NameOfVeteran[0]": "John Doe", // Dummy Name
-
-    // Other Text Fields
-    "F[0].#subform[1].TextField10[0]": "Sample Text for TextField10", // Dummy Text
-    "F[0].#subform[1].HowExamCOnducted[0]": "In person", // Dummy Exam Conduct Method
-    "F[0].#subform[1].IdentifyEvidence[0]": "Document A, Document B", // Dummy Evidence List
-
-    // Checkboxes with Dummy States (true for checked, false for unchecked)
-    "F[0].#subform[1].VeteranClaimant[0]": true, // Checked
-    "F[0].#subform[1].OtherDescribe[0]": false, // Unchecked
-
-    // Radio Button Groups with Selected Option
-    "F[0].#subform[1].RadioButtonList[0]": "1", // Selecting option value "1" for the first group
-    "F[0].#subform[1].RadioButtonList[1]": "0", // Selecting option value "0" for the second group
-    "F[0].#subform[1].RadioButtonList[2]": "1", // Selecting option value "1" for the third group
-    "F[0].#subform[1].RadioButtonList[3]": "0", // Selecting option value "0" for the fourth group
-  };
-
   const goToNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
@@ -46,31 +26,6 @@ function App() {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
-  };
-
-  // console.log(inputRefs.current);
-
-  const handleAutofill = () => {
-    Object.entries(autofillValues).forEach(([fieldName, value]) => {
-      const inputElement = inputRefs.current[fieldName];
-      if (!inputElement) console.warn(`No input found for ${fieldName}`);
-      if (inputElement.type === "checkbox") {
-        inputElement.checked = value;
-      } else {
-        inputElement.value = value;
-      }
-    });
-
-    Object.entries(autofillValues).forEach(([fieldName, value]) => {
-      const inputElement = inputRefs.current[fieldName];
-      if (!inputElement) console.warn(`No input found for ${fieldName}`);
-
-      if (inputElement.type === "radio") {
-        if (inputElement.value === value.toString()) {
-          inputElement.checked = true;
-        }
-      }
-    });
   };
 
   const loadScript = (src, id) => {
@@ -154,9 +109,6 @@ function App() {
                     if (annotation.fieldType === "Tx") {
                       input = document.createElement("input");
                       input.type = "text";
-                      // add input type from here
-                      // fieldObj = { ...fieldObj, type: "text" };
-                      // console.log("fieldObj", fieldObj);
                       input.value = annotation.fieldValue || "";
                     } else if (annotation.fieldType === "Btn") {
                       if (annotation.checkBox) {
@@ -187,6 +139,7 @@ function App() {
                     input.style.height =
                       ((annotation.rect[3] - annotation.rect[1]) * scale) +
                       "px";
+                    input.title = annotation.id; // Set the title attribute to the ID
                     containerRef.current.appendChild(input);
                     inputRefs.current[annotation.fieldName] = input;
 
@@ -225,55 +178,6 @@ function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  const updatePdf = async () => {
-    if (pdf) {
-      const existingPdf = await PDFDocument.load(pdf);
-      const form = existingPdf.getForm();
-      const updatedGroups = {}; // To track which radio groups have been updated
-
-      Object.entries(inputRefs.current).forEach(([key, input]) => {
-        const field = form.getField(key);
-
-        if (field) {
-          if (field.constructor.name.includes("PDFTextField")) {
-            field.setText(input.value);
-          } else if (field.constructor.name.includes("PDFCheckBox")) {
-            if (input.checked) {
-              field.check();
-            } else {
-              field.uncheck();
-            }
-          } else if (field.constructor.name.match(/PDFRadioGroup/)) {
-            const options = field.getOptions(); // Get available options as an array
-
-            // Find the checked radio button in this group using the key (field name)
-            const checkedInput = document.querySelector(
-              `input[name="${key}"]:checked`,
-            );
-
-            if (checkedInput && !updatedGroups[field.getName()]) {
-              const optionValue = parseInt(checkedInput.value) + 1;
-              field.select(optionValue.toString()); // Select the option in the radio group
-              updatedGroups[field.getName()] = true; // Mark this group as updated
-            }
-          }
-        } else {
-          console.warn(`No field found in PDF for ${key}`);
-        }
-      });
-
-      // Save the updated PDF and provide it for download
-      const pdfBytes = await existingPdf.save();
-      const blob = new Blob([pdfBytes], { type: "application/pdf" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "updated-document.pdf";
-      link.click();
-    } else {
-      console.warn("No PDF loaded when attempting to save updates.");
-    }
-  };
-
   return (
     <>
       <div
@@ -305,20 +209,6 @@ function App() {
               position: "relative",
             }}
           />
-          <button
-            className="outlined-button"
-            onClick={updatePdf}
-          >
-            Save Changes
-          </button>
-
-          <button
-            className="outlined-button"
-            onClick={handleAutofill}
-          >
-            Autofill
-          </button>{" "}
-          {/* Autofill Button */}
         </div>
         <div ref={containerRef} />
 
